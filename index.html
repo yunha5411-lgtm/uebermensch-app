@@ -127,6 +127,22 @@
   <p class="heat-label sans">지난 14일간의 등정</p>
   <div class="heat" id="heat"></div>
 
+  <button class="sans" id="reportBtn" onclick="showReport()" style="width:100%; margin-top:1.5rem; background:#242B3D; border:1px solid #3A4256; color:#C9A54A; border-radius:10px; padding:12px; font-size:14px; font-weight:700; cursor:pointer;">이번 달 결산 보기</button>
+
+  <div id="reportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10; align-items:center; justify-content:center; padding:1.2rem;">
+    <div style="background:#1B1F2E; border:1px solid #3A4256; border-radius:14px; padding:1.5rem 1.3rem; max-width:420px; width:100%; max-height:85vh; overflow-y:auto;">
+      <div id="reportContent"></div>
+      <button class="sans" onclick="closeReport()" style="width:100%; margin-top:1rem; background:#C9A54A; border:none; border-radius:8px; padding:10px; font-weight:700; color:#1B1F2E; cursor:pointer;">닫기</button>
+    </div>
+  </div>
+
+  <div id="dayModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10; align-items:center; justify-content:center; padding:1.2rem;">
+    <div style="background:#1B1F2E; border:1px solid #3A4256; border-radius:14px; padding:1.5rem 1.3rem; max-width:420px; width:100%; max-height:85vh; overflow-y:auto;">
+      <div id="dayContent"></div>
+      <button class="sans" onclick="closeDay()" style="width:100%; margin-top:1rem; background:#C9A54A; border:none; border-radius:8px; padding:10px; font-weight:700; color:#1B1F2E; cursor:pointer;">닫기</button>
+    </div>
+  </div>
+
   <div class="footer sans">
     이 페이지는 브라우저에만 저장되며 인터넷 연결이 필요 없습니다.<br>
     아이폰: 공유 버튼 → "홈 화면에 추가" · 안드로이드: 메뉴 → "홈 화면에 추가"를 누르면 앱처럼 쓸 수 있습니다.
@@ -296,6 +312,8 @@ function render() {
     const ratio = state.tasks.length === 0 ? 0 : set.size / state.tasks.length;
     const cell = document.createElement("div");
     cell.title = dStr;
+    cell.style.cursor = "pointer";
+    cell.onclick = () => showDay(dStr);
     if (ratio >= 1) cell.style.background = "#7A9471";
     else if (ratio > 0) cell.style.background = "#8A7239";
     if (dStr === today) cell.style.borderColor = "#C9A54A";
@@ -306,6 +324,87 @@ function render() {
 document.getElementById("taskInput").addEventListener("keydown", e => {
   if (e.key === "Enter") addTask();
 });
+
+function showDay(dateStr) {
+  const set = new Set(state.completions[dateStr] || []);
+  const isToday = dateStr === today;
+  let rows = state.tasks.map(t => {
+    const done = set.has(t.id);
+    return `<div style="display:flex; align-items:center; gap:8px; padding:6px 0; color:${done ? '#EDE7D9' : '#6b7286'};">
+      <span style="width:18px;">${done ? '&#10003;' : '&middot;'}</span>
+      <span style="${done ? '' : 'text-decoration:line-through;'}">${t.name.replace(/</g, "&lt;")}</span>
+    </div>`;
+  }).join("");
+  if (state.tasks.length === 0) rows = `<p style="color:#8B92A8;">과제가 없습니다.</p>`;
+  document.getElementById("dayContent").innerHTML = `
+    <p class="sans" style="color:#C9A54A; font-weight:700; font-size:16px; margin:0 0 4px;">${dateStr}${isToday ? " (오늘)" : ""}</p>
+    <p class="sans" style="color:#8B92A8; font-size:13px; margin:0 0 12px;">${set.size} / ${state.tasks.length} 완료</p>
+    <div class="sans" style="font-size:14px;">${rows}</div>
+  `;
+  document.getElementById("dayModal").style.display = "flex";
+}
+function closeDay() { document.getElementById("dayModal").style.display = "none"; }
+
+function showReport() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+  let conqueredDays = 0;
+  let bestStreakInMonth = 0, currentRun = 0;
+  const perHabit = {};
+  state.tasks.forEach(t => perHabit[t.id] = { name: t.name, done: 0, total: 0 });
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(y, m, d);
+    if (dt > now) break;
+    const dStr = dt.toISOString().slice(0, 10);
+    const set = new Set(state.completions[dStr] || []);
+    state.tasks.forEach(t => {
+      perHabit[t.id].total++;
+      if (set.has(t.id)) perHabit[t.id].done++;
+    });
+    const full = state.tasks.length > 0 && state.tasks.every(t => set.has(t.id));
+    if (full) {
+      conqueredDays++;
+      currentRun++;
+      bestStreakInMonth = Math.max(bestStreakInMonth, currentRun);
+    } else {
+      currentRun = 0;
+    }
+  }
+
+  const habitRows = Object.values(perHabit).map(h => {
+    const pct = h.total === 0 ? 0 : Math.round((h.done / h.total) * 100);
+    return `<div style="margin-bottom:10px;">
+      <div class="sans" style="display:flex; justify-content:space-between; font-size:13px; color:#EDE7D9; margin-bottom:4px;">
+        <span>${h.name.replace(/</g, "&lt;")}</span><span style="color:#8B92A8;">${pct}%</span>
+      </div>
+      <div style="background:#3A4256; border-radius:6px; height:8px; overflow:hidden;">
+        <div style="width:${pct}%; height:100%; background:#C9A54A;"></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  const overallPct = now.getDate() === 0 ? 0 : Math.round((conqueredDays / now.getDate()) * 100);
+  let verdict;
+  if (overallPct >= 80) verdict = "이번 달, 당신은 사자처럼 싸웠습니다. '나는 원한다'는 외침이 삶이 되었습니다.";
+  else if (overallPct >= 40) verdict = "낙타와 사자 사이, 짐을 견디며 조금씩 스스로의 길을 찾아가는 중입니다.";
+  else verdict = "아직 짐을 짊어지는 낙타의 시간입니다. 매일의 반복이 결국 힘이 됩니다.";
+
+  document.getElementById("reportContent").innerHTML = `
+    <p class="sans" style="color:#C9A54A; font-weight:700; font-size:17px; margin:0 0 12px;">${y}년 ${m + 1}월 결산</p>
+    <div class="stats" style="margin-bottom:1.2rem;">
+      <div class="stat"><p class="l sans">완전 정복일</p><p class="v sans">${conqueredDays}일</p></div>
+      <div class="stat"><p class="l sans">이번 달 최장 연속</p><p class="v sans">${bestStreakInMonth}일</p></div>
+    </div>
+    <p class="sans" style="font-size:12px; color:#8B92A8; margin:0 0 10px;">습관별 완료율</p>
+    ${habitRows || '<p class="sans" style="color:#8B92A8;">과제가 없습니다.</p>'}
+    <p class="sans" style="font-size:13px; color:#EDE7D9; font-style:italic; margin-top:1.2rem; line-height:1.7;">${verdict}</p>
+  `;
+  document.getElementById("reportModal").style.display = "flex";
+}
+function closeReport() { document.getElementById("reportModal").style.display = "none"; }
 
 render();
 

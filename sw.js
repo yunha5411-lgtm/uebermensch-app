@@ -1,4 +1,4 @@
-const CACHE_NAME = "uebermensch-v1";
+const CACHE_NAME = "uebermensch-v2";
 const FILES = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
